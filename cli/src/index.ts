@@ -9,7 +9,7 @@ const program = new Command();
 program
   .name("dotclaude")
   .description("Add Claude Code agents, skills, and rules to your project")
-  .version("0.1.2");
+  .version("0.1.3");
 
 program.addCommand(initCommand);
 program.addCommand(addCommand);

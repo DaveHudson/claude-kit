@@ -1,13 +1,14 @@
 {
   "name": "dotclaude",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "CLI to add Claude Code agents, skills, and rules to your project",
   "type": "module",
   "bin": {
     "dotclaude": "./dist/index.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts",
