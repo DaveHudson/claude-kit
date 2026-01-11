@@ -1,7 +1,5 @@
 import { Command } from "commander";
-import chalk from "chalk";
-import ora from "ora";
-import prompts from "prompts";
+import * as p from "@clack/prompts";
 import {
   CONTENT_REGISTRY,
   ContentItem,
@@ -20,45 +18,41 @@ import {
 
 async function selectItems(): Promise<ContentItem[]> {
   const types: ItemType[] = ["agents", "skills", "rules"];
-  const choices: prompts.Choice[] = [];
+  const options: { value: string; label: string; hint?: string }[] = [];
 
   for (const type of types) {
-    // Add group header
-    choices.push({
-      title: chalk.bold.cyan(`── ${type.toUpperCase()} ──`),
-      value: `__header_${type}`,
-      disabled: true,
-    });
-
     const items = getItemsByType(type);
+    const typeLabel = `[${type.slice(0, -1)}]`;
+
     for (const item of items) {
       const exists = await fileExists(item.path);
-      choices.push({
-        title: exists
-          ? `${item.name} ${chalk.yellow("(installed)")}`
-          : item.name,
+      const installedBadge = exists ? " (installed)" : "";
+
+      options.push({
         value: item.name,
-        description: item.description,
+        label: `${typeLabel} ${item.name}${installedBadge}`,
+        hint: item.description,
       });
     }
   }
 
-  const response = await prompts({
-    type: "multiselect",
-    name: "items",
+  const selected = await p.multiselect({
     message: "Select components to add",
-    choices,
-    hint: "- Space to select, Enter to confirm",
-    instructions: false,
+    options,
+    required: false,
   });
 
-  if (!response.items || response.items.length === 0) {
+  if (p.isCancel(selected)) {
+    p.cancel("Cancelled");
+    process.exit(0);
+  }
+
+  if (!selected || selected.length === 0) {
     return [];
   }
 
-  return response.items
-    .filter((name: string) => !name.startsWith("__header_"))
-    .map((name: string) => getItemByName(name)!)
+  return (selected as string[])
+    .map((name) => getItemByName(name)!)
     .filter(Boolean);
 }
 
@@ -69,7 +63,6 @@ async function installItem(item: ContentItem): Promise<void> {
     await writeContentFile(filePath, content);
   }
 
-  // Add import to CLAUDE.md
   const importLine = getImportLine(item.path);
   await appendToClaudeMd(importLine);
 }
@@ -80,6 +73,8 @@ export const addCommand = new Command()
   .argument("[items...]", "Items to add (e.g., frontend tdd workflow)")
   .option("-a, --all", "Add all available items")
   .action(async (itemNames: string[], options) => {
+    p.intro("dotclaude");
+
     await ensureClaudeDir();
 
     let items: ContentItem[] = [];
@@ -87,52 +82,53 @@ export const addCommand = new Command()
     if (options.all) {
       items = [...CONTENT_REGISTRY];
     } else if (itemNames.length > 0) {
-      // Direct item names provided
       for (const name of itemNames) {
         const item = getItemByName(name);
         if (!item) {
-          console.error(chalk.red(`Unknown item: ${name}`));
-          console.log(chalk.dim("Run `dotclaude list` to see available items."));
+          p.log.error(`Unknown item: ${name}`);
+          p.log.info("Run `dotclaude list` to see available items.");
           process.exit(1);
         }
         items.push(item);
       }
     } else {
-      // Interactive mode
       items = await selectItems();
     }
 
     if (items.length === 0) {
-      console.log(chalk.yellow("No items selected."));
+      p.log.warn("No items selected.");
+      p.outro("");
       return;
     }
 
-    console.log();
-    const spinner = ora("Installing components...").start();
+    const s = p.spinner();
+    s.start("Installing components");
 
     let installed = 0;
     const errors: string[] = [];
+    const installedNames: string[] = [];
 
     for (const item of items) {
-      spinner.text = `Installing ${item.name}...`;
+      s.message(`Installing ${item.name}...`);
 
       try {
         await installItem(item);
         installed++;
+        installedNames.push(item.name);
       } catch (error) {
         errors.push(`${item.name}: ${error}`);
       }
     }
 
     if (errors.length > 0) {
-      spinner.warn(`Installed ${installed}/${items.length} components`);
-      console.log(chalk.red("\nErrors:"));
+      s.stop(`Installed ${installed}/${items.length} components`);
       for (const error of errors) {
-        console.log(chalk.red(`  • ${error}`));
+        p.log.error(error);
       }
     } else {
-      spinner.succeed(`Installed ${installed} component${installed === 1 ? "" : "s"}`);
+      s.stop(`Installed ${installed} component${installed === 1 ? "" : "s"}`);
     }
 
-    console.log(chalk.dim("\nComponents added to .claude/ and imported in CLAUDE.md"));
+    p.note(installedNames.join("\n"), "Added to .claude/");
+    p.outro("Imports added to CLAUDE.md");
   });

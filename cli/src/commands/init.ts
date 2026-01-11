@@ -1,23 +1,24 @@
 import { Command } from "commander";
-import chalk from "chalk";
-import ora from "ora";
+import * as p from "@clack/prompts";
 import { ensureClaudeDir } from "../utils/files.js";
 
 export const initCommand = new Command()
   .name("init")
   .description("Initialize dotclaude in your project")
   .action(async () => {
-    const spinner = ora("Initializing dotclaude...").start();
+    p.intro("dotclaude");
+
+    const s = p.spinner();
+    s.start("Creating .claude directory");
 
     try {
       await ensureClaudeDir();
-      spinner.succeed("dotclaude initialized");
+      s.stop("Created .claude directory");
 
-      console.log(chalk.green("\n  ✓ Created .claude/ directory"));
-      console.log(chalk.dim("\n  Run `dotclaude add` to add components.\n"));
+      p.outro("Run `dotclaude add` to add components");
     } catch (error) {
-      spinner.fail("Failed to initialize");
-      console.error(chalk.red(`\n  ${error}`));
+      s.stop("Failed to initialize");
+      p.log.error(String(error));
       process.exit(1);
     }
   });
